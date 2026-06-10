@@ -61,7 +61,7 @@ export async function GET(
     const canEdit = !isFinished && !hasResult && !isPast;
 
     let reason = null;
-    if (isFinished) reason = "Jogo já finalizado";
+    if (isFinished) reason = "Jogo finalizado";
     else if (hasResult) reason = "Resultado oficial já lançado";
     else if (isPast) reason = "Data do jogo já passou";
 

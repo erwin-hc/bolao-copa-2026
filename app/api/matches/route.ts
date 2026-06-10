@@ -24,9 +24,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Token inválido" }, { status: 401 });
     }
 
-    const now = new Date();
-
-    // Buscar todos os jogos
+    // Buscar jogos (SEM verificação de data no servidor)
     const matches = db
       .prepare(
         `
@@ -54,50 +52,9 @@ export async function GET(request: Request) {
       )
       .all(userId);
 
-    // Processar cada jogo - REGRA SIMPLES
-    const matchesWithLockStatus = matches.map((match: any) => {
-      const matchDate = new Date(match.match_date);
-      const hasResult =
-        match.official_score_a !== null && match.official_score_b !== null;
-      const isFinished = match.is_finished === 1;
-
-      // Só bloqueia se: tem resultado OU está finalizado
-      // NÃO bloqueia por data!
-      const isLocked = hasResult || isFinished;
-
-      let lockReason = null;
-      if (isFinished) lockReason = "Jogo já finalizado";
-      else if (hasResult) lockReason = "Resultado oficial já lançado";
-
-      return {
-        id: match.id,
-        phase: match.phase,
-        group_name: match.group_name,
-        team_a: match.team_a,
-        team_b: match.team_b,
-        match_date: match.match_date,
-        bet_score_a: match.bet_score_a,
-        bet_score_b: match.bet_score_b,
-        official_score_a: match.official_score_a,
-        official_score_b: match.official_score_b,
-        is_finished: match.is_finished,
-        can_edit: !isLocked, // TRUE para todos os jogos sem resultado
-        lock_reason: lockReason,
-      };
-    });
-
-    const lockedCount = matchesWithLockStatus.filter(
-      (m: any) => !m.can_edit,
-    ).length;
-    const availableCount = matchesWithLockStatus.filter(
-      (m: any) => m.can_edit,
-    ).length;
-
-    console.log(`📊 Total: ${matchesWithLockStatus.length} jogos`);
-    console.log(`🟢 Liberados: ${availableCount}`);
-    console.log(`🔴 Bloqueados (só os que têm resultado): ${lockedCount}`);
-
-    return NextResponse.json(matchesWithLockStatus);
+    // Retornar os dados brutos (sem processamento de data)
+    // A verificação será feita no frontend
+    return NextResponse.json(matches);
   } catch (error) {
     console.error("Erro:", error);
     return NextResponse.json({ error: "Erro interno" }, { status: 500 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { SoccerBallIcon, SoccerPlayerAvatarIcon } from "../components/svgs";
 import { useMessages } from "@/providers/message-provider";
 import "flag-icons/css/flag-icons.min.css";
@@ -13,15 +13,14 @@ import {
   Dice2,
   Dice3,
   Dice4,
-  Globe,
-  Grab,
   Group,
+  Loader,
   LockKeyhole,
   Medal,
   Save,
   Swords,
-  Trophy,
 } from "lucide-react";
+import MessageDisplay from "@/components/ui/MessageDisplay";
 
 type Match = {
   id: number;
@@ -44,7 +43,6 @@ function LockedInput({
   value,
   onChange,
   isLocked,
-  lockReason,
   placeholder,
 }: {
   value: number | string;
@@ -57,40 +55,48 @@ function LockedInput({
     return (
       <div className="relative">
         <input
-          type="number"
+          type="text"
           value={value}
           disabled
-          className="w-20 mx-auto mt-2 text-center text-2xl font-bold bg-slate-700 border-2 border-slate-600 rounded-lg p-2 cursor-not-allowed opacity-60 text-slate-950"
+          className="w-20 mx-auto mt-2 text-center text-2xl font-bold bg-slate-950/15 border-2 border-slate-600 rounded-lg p-2 cursor-not-allowed opacity-60"
           placeholder={placeholder}
         />
-        {lockReason && (
-          <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-4 ">
-            <div className="bg-smui-red text-xs p-1 flex gap-2 rounded whitespace-nowrap">
-              <LockKeyhole size={14} /> <span>{lockReason}</span>
-            </div>
-          </div>
-        )}
       </div>
     );
   }
 
+  const getSafeValue = () => {
+    if (value === undefined || value === null) return "";
+    const num = Number(value);
+    if (isNaN(num)) return "";
+    return String(num);
+  };
+
   return (
     <input
-      type="number"
-      min="0"
-      max="20"
-      value={value !== undefined && value !== null ? value : ""}
+      type="text"
+      inputMode="numeric"
+      pattern="[0-9]*"
+      value={getSafeValue()}
+      onClick={(e) => e.currentTarget.select()}
       onChange={(e) => {
-        const newValue = parseInt(e.target.value) || 0;
-        onChange(newValue);
+        const rawValue = e.target.value;
+        if (rawValue === "") {
+          onChange(0);
+          return;
+        }
+        const numValue = parseInt(rawValue, 10);
+        if (!isNaN(numValue) && numValue >= 0 && numValue <= 20) {
+          onChange(numValue);
+        }
       }}
-      className="w-20 mx-auto mt-2 text-center text-2xl font-bold bg-slate-100 text-slate-950 border-2 border-slate-600 focus:border-smui-green focus:outline-none rounded-lg p-2 hover:border-slate-500 transition"
+      className="w-20 mx-auto mt-2 text-center text-2xl font-bold bg-slate-100 text-slate-950 border-2 border-slate-600 focus:border-green-500 focus:outline-none rounded-lg p-2 hover:border-slate-500 transition cursor-pointer"
       placeholder={placeholder}
     />
   );
 }
 
-const countryCodeMap: Record<string, string> = {
+export const countryCodeMap: Record<string, string> = {
   Catar: "qa",
   Equador: "ec",
   Senegal: "sn",
@@ -129,8 +135,6 @@ export function Flag({ country }: { country: string }) {
   const code = countryCodeMap[country]?.toLowerCase();
   if (!code) return null;
 
-  console.log(`Renderizando bandeira para: ${country} -> ${code}`); // Debug
-
   return (
     <span
       className={`fi fi-${code}`}
@@ -138,7 +142,14 @@ export function Flag({ country }: { country: string }) {
         display: "inline-block",
         width: "32px",
         height: "24px",
+        minWidth: "32px",
+        minHeight: "24px",
         backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundRepeat: "no-repeat",
+        fontSize: "0",
+        lineHeight: "1",
+        flexShrink: 0,
       }}
     />
   );
@@ -151,8 +162,13 @@ export default function BetsPage() {
   const [saving, setSaving] = useState(false);
   const [userName, setUserName] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
+  const [tempBets, setTempBets] = useState<{
+    [key: number]: { a: number; b: number };
+  }>({});
 
   const { addMessage } = useMessages();
+  const isFetching = useRef(false);
+  const lastFetchTime = useRef(0);
 
   const phases = [
     { key: "groups", label: "Fase de Grupos", icon: <Group /> },
@@ -162,6 +178,110 @@ export default function BetsPage() {
     { key: "third", label: "Disputa de 3º", icon: <Dice3 /> },
     { key: "final", label: "FINAL", icon: <Medal /> },
   ];
+
+  const fetchMatches = async () => {
+    // Evitar múltiplas chamadas simultâneas
+    if (isFetching.current) {
+      console.log("⏳ Já está carregando, ignorando...");
+      return;
+    }
+
+    // Evitar chamadas muito frequentes
+    const now = Date.now();
+    if (now - lastFetchTime.current < 500) {
+      console.log("⏳ Chamada muito rápida, ignorando...");
+      return;
+    }
+
+    isFetching.current = true;
+    lastFetchTime.current = now;
+
+    try {
+      const token = localStorage.getItem("token");
+      const timestamp = Date.now();
+      const response = await fetch(`/api/matches?t=${timestamp}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (response.status === 401) {
+        window.location.href = "/login";
+        return;
+      }
+
+      const data = await response.json();
+
+      const currentDate = new Date();
+      const today = new Date(
+        currentDate.getFullYear(),
+        currentDate.getMonth(),
+        currentDate.getDate(),
+      );
+
+      const processedMatches = data.map((match: any) => {
+        const matchDateRaw = new Date(match.match_date);
+        const matchDay = new Date(
+          matchDateRaw.getFullYear(),
+          matchDateRaw.getMonth(),
+          matchDateRaw.getDate(),
+        );
+        const deadline = new Date(matchDay);
+        deadline.setDate(deadline.getDate() - 1);
+
+        const hasResult =
+          match.official_score_a !== null && match.official_score_b !== null;
+        const isFinished = match.is_finished === 1;
+        const isBlocked = today >= deadline;
+
+        let isLocked = false;
+        let lockReason = null;
+
+        if (hasResult) {
+          isLocked = true;
+          lockReason = `Resultado oficial já lançado (${match.official_score_a} x ${match.official_score_b})`;
+        } else if (isFinished) {
+          isLocked = true;
+          lockReason = "Jogo já finalizado";
+        } else if (isBlocked) {
+          isLocked = true;
+          lockReason = `Prazo encerrado (apostas só até ${deadline.toLocaleDateString("pt-BR")})`;
+        }
+
+        return {
+          ...match,
+          can_edit: !isLocked,
+          lock_reason: lockReason,
+          betting_deadline: deadline
+            .toISOString()
+            .slice(0, 19)
+            .replace("T", " "),
+        };
+      });
+
+      setMatches(processedMatches);
+
+      // Inicializar valores temporários
+      const initialTemp: { [key: number]: { a: number; b: number } } = {};
+      processedMatches.forEach((match: Match) => {
+        initialTemp[match.id] = {
+          a: match.bet_score_a ?? 0,
+          b: match.bet_score_b ?? 0,
+        };
+      });
+      setTempBets(initialTemp);
+
+      const liberados = processedMatches.filter(
+        (m: Match) => m.can_edit === true,
+      ).length;
+      console.log(
+        `📊 Liberados: ${liberados} | Total: ${processedMatches.length}`,
+      );
+    } catch (error) {
+      console.error("Erro ao carregar jogos:", error);
+    } finally {
+      isFetching.current = false;
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -184,49 +304,29 @@ export default function BetsPage() {
     fetchMatches();
   }, []);
 
-  const fetchMatches = async () => {
-    const startTime = Date.now();
-    try {
-      const token = localStorage.getItem("token");
-      const response = await fetch("/api/matches", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (response.status === 401) {
-        window.location.href = "/login";
-        return;
-      }
-
-      const data = await response.json();
-      const endTime = Date.now();
-
-      console.log(
-        `✅ ${data.length} jogos carregados em ${endTime - startTime}ms`,
-      );
-
-      const liberados = data.filter((m: Match) => m.can_edit === true).length;
-      const bloqueados = data.filter((m: Match) => m.can_edit === false).length;
-      console.log(`📊 Liberados: ${liberados} | Bloqueados: ${bloqueados}`);
-
-      setMatches(data);
-    } catch (error) {
-      console.error("Erro ao carregar jogos:", error);
-    } finally {
-      setLoading(false);
-    }
+  const updateTempBet = (matchId: number, scoreA: number, scoreB: number) => {
+    setTempBets((prev) => ({
+      ...prev,
+      [matchId]: { a: scoreA, b: scoreB },
+    }));
   };
 
-  const updateBet = async (matchId: number, scoreA: number, scoreB: number) => {
+  const saveBet = async (matchId: number) => {
     const match = matches.find((m) => m.id === matchId);
+    const tempBet = tempBets[matchId];
 
     if (!match?.can_edit) {
       addMessage(
         "warning",
         `Não é possível alterar esta aposta: ${match?.lock_reason || "Jogo bloqueado"}`,
       );
-
       return;
     }
+
+    if (!tempBet) return;
+
+    const scoreA = tempBet.a;
+    const scoreB = tempBet.b;
 
     setSaving(true);
     try {
@@ -256,12 +356,11 @@ export default function BetsPage() {
               : m,
           ),
         );
-
-        addMessage("success", "Aposta salva!");
+        addMessage("success", "✅ Aposta salva com sucesso!");
       } else if (response.status === 401) {
         window.location.href = "/login";
       } else {
-        addMessage("error", `${data.error} || "Erro ao salvar aposta"`);
+        addMessage("error", data.error || "Erro ao salvar aposta");
       }
     } catch (error) {
       console.error("Erro:", error);
@@ -280,13 +379,11 @@ export default function BetsPage() {
   const filteredMatches = matches
     .filter((m) => m.phase === activePhase)
     .sort((a, b) => {
-      // Se for fase de grupos, ordenar pelo nome do grupo
       if (activePhase === "groups") {
         const groupA = a.group_name || "";
         const groupB = b.group_name || "";
         return groupA.localeCompare(groupB);
       }
-      // Para outras fases, manter ordem original ou ordenar por data
       return (
         new Date(a.match_date).getTime() - new Date(b.match_date).getTime()
       );
@@ -313,12 +410,12 @@ export default function BetsPage() {
           <div className="text-6xl mb-4 animate-bounce">
             <SoccerBallIcon size={50} />
           </div>
-          <div className="flex gap-2 ">
+          <div className="flex gap-2">
             <div className="flex gap-2 items-center">
-              <p className="text-xl ">Carregando jogos</p>
-              <span className="w-1 h-1 bg-slate-950  rounded-full animate-bounce [animation-delay:-0.3s]" />
-              <span className="w-1 h-1 bg-slate-950  rounded-full animate-bounce [animation-delay:-0.15s]" />
-              <span className="w-1 h-1 bg-slate-950  rounded-full animate-bounce" />
+              <p className="text-xl">Carregando Apostas</p>
+              <span className="w-1 h-1 bg-slate-950 rounded-full animate-bounce [animation-delay:-0.3s]" />
+              <span className="w-1 h-1 bg-slate-950 rounded-full animate-bounce [animation-delay:-0.15s]" />
+              <span className="w-1 h-1 bg-slate-950 rounded-full animate-bounce" />
             </div>
           </div>
           <p className="text-sm mt-2 text-slate-800">Aguarde um momento</p>
@@ -328,40 +425,40 @@ export default function BetsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-smui-surface-3 text-smui-dark-surface-0 ">
-      {/* Header */}
-      <div className=" border-smui-dark-surface-3/50 bg-smui-green/85 backdrop-blur-sm border-b sticky top-0 z-10">
+    <div className="min-h-screen bg-smui-surface-3 text-smui-dark-surface-0">
+      <div className="border-smui-dark-surface-3/50 bg-smui-green/85 backdrop-blur-sm border-b sticky top-0 z-10">
+        <MessageDisplay />
         <div className="py-2 px-6">
           <div className="flex items-center justify-center flex-wrap sm:justify-between">
-            <div className="flex items-center ">
+            <div className="flex items-center">
               <div className="flex items-center justify-center">
-                <SoccerPlayerAvatarIcon size={50} className=" m-2" />
+                <SoccerPlayerAvatarIcon size={38} className="mr-2" />
               </div>
               <div className="text-sm">
-                <h1 className="text-2xl font-bold ">Bolão Copa 2026</h1>
+                <h1 className="text-2xl font-bold">Bolão Copa 2026</h1>
                 {userName && (
-                  <span className="text-smui-orange ">Olá, {userName}!</span>
+                  <span className="text-smui-orange">Olá, {userName}!</span>
                 )}
               </div>
             </div>
-            <div className="flex gap-3">
+            <div className="mt-2 flex gap-1 flex-wrap justify-center">
               <button
                 onClick={() => (window.location.href = "/ranking")}
-                className="cursor-pointer w-28 bg-smui-yellow hover:bg-smui-yellow/80  text-slate-950 font-semibold px-4 py-2 rounded-lg transition border border-smui-dark-surface-3/50"
+                className="cursor-pointer w-28 h-8 bg-smui-yellow hover:bg-smui-yellow/80 text-slate-950 font-semibold px-4 py-1 rounded-lg transition border border-smui-dark-surface-3/50"
               >
                 Ranking
               </button>
               {isAdmin && (
                 <button
                   onClick={() => (window.location.href = "/admin/results")}
-                  className="cursor-pointer w-28 bg-smui-purple hover:bg-smui-purple/80 px-4 py-2 rounded-lg transition border border-smui-dark-surface-3/50"
+                  className="cursor-pointer w-28 h-8 bg-smui-purple hover:bg-smui-purple/80 px-4 py-1 rounded-lg transition border border-smui-dark-surface-3/50"
                 >
                   Admin
                 </button>
               )}
               <button
                 onClick={handleLogout}
-                className="cursor-pointer w-28 bg-smui-red hover:bg-smui-red/80px-4 py-2 rounded-lg transition border border-smui-dark-surface-3/50"
+                className="cursor-pointer w-28 h-8 bg-smui-red hover:bg-smui-red/80 px-4 py-1 rounded-lg transition border border-smui-dark-surface-3/50"
               >
                 Sair
               </button>
@@ -370,16 +467,15 @@ export default function BetsPage() {
         </div>
       </div>
 
-      {/* Aviso de Regras */}
-      <div className="container mx-auto px-4 pt-6 ">
+      <div className="container mx-auto px-4 pt-6">
         <div className="bg-smui-surface-2 p-2 border border-smui-dark-surface-3/50">
-          <div className="flex items-center gap-2 ">
+          <div className="flex items-center gap-2">
             <span className="text-2xl">
               <Clock />
             </span>
             <div>
               <p className="font-semibold text-smui-green">Regra de Apostas</p>
-              <p className="text-sm ">
+              <p className="text-sm">
                 Você pode apostar ou alterar sua aposta até{" "}
                 <strong className="text-smui-red">1 dia antes</strong> do jogo.
                 Após esse prazo, as apostas ficam bloqueadas.
@@ -389,7 +485,6 @@ export default function BetsPage() {
         </div>
       </div>
 
-      {/* Navegação por Fases */}
       <div className="container mx-auto p-2 text-smui-dark-surface-0 mb-10">
         <div className="flex gap-2 mt-4 mb-4 justify-center items-center flex-wrap">
           {phases.map((phase) => (
@@ -397,11 +492,11 @@ export default function BetsPage() {
               key={phase.key}
               onClick={() => setActivePhase(phase.key)}
               className={`
-                p-2 w-70 font-bold transition-all transform flex items-center justify-start cursor-pointer               
+                p-2 w-70 font-bold transition-all transform flex items-center justify-start cursor-pointer
                 ${
                   activePhase === phase.key
-                    ? "bg-smui-green text-slate-950 border border-smui-dark-surface-3/50 "
-                    : "bg-smui-surface-2 border border-smui-dark-surface-3/50  "
+                    ? "bg-smui-green text-slate-950 border border-smui-dark-surface-3/50"
+                    : "bg-smui-surface-2 border border-smui-dark-surface-3/50"
                 }
               `}
             >
@@ -411,7 +506,6 @@ export default function BetsPage() {
           ))}
         </div>
 
-        {/* Lista de Jogos */}
         <div
           className={`grid gap-4 text-smui-dark-surface-0 ${
             filteredMatches.length === 1
@@ -422,17 +516,18 @@ export default function BetsPage() {
           {filteredMatches.map((match) => {
             const isLocked = match.can_edit === false;
             const lockReason = match.lock_reason;
+            const tempBet = tempBets[match.id] || { a: 0, b: 0 };
 
             return (
               <div
                 key={match.id}
-                className={`bg-smui-surface-2 pb-10 rounded-2xl border border-smui-dark-surface-3/50 overflow-hidden transition-all duration-300 text-smui-dark-surface-0 ${
-                  isLocked ? "opacity-95 " : " hover:shadow-emerald-500/10 "
+                className={`bg-smui-surface-2 pb-0 border border-smui-dark-surface-3/50 overflow-hidden transition-all duration-300 text-smui-dark-surface-0 grid grid-rows-[60px_1fr_1fr_60px] grid-cols-[1fr_30px_1fr] [grid-template-areas:'header_header_header'_'title_title_title'_'input_input_input'_'footer_footer_footer'] ${
+                  isLocked ? "opacity-95" : "hover:shadow-emerald-500/10"
                 }`}
               >
                 <div
-                  className={`p-2 border-b border-smui-dark-surface-3/50 ${
-                    isLocked ? "bg-smui-red/50 " : "bg-smui-green/50"
+                  className={`[grid-area:header] p-2 border-b border-smui-dark-surface-3/50 ${
+                    isLocked ? "bg-smui-red/50" : "bg-smui-green/50"
                   }`}
                 >
                   <div className="text-smui-dark-surface-0 text-md font-semibold flex justify-between items-center">
@@ -458,7 +553,7 @@ export default function BetsPage() {
                       </span>
                     )}
                     {!isLocked && (
-                      <span className="text-xs bg-smui-green px-2 py-0.5 rounded-full ">
+                      <span className="text-xs bg-smui-green px-2 py-0.5 rounded-full">
                         Liberado
                       </span>
                     )}
@@ -473,54 +568,64 @@ export default function BetsPage() {
                       minute: "2-digit",
                     })}
                   </div>
-                  {match.betting_deadline && !isLocked && (
-                    <div className="text-xs mt-1 text-smui-green">
-                      Prazo final:{" "}
-                      {new Date(match.betting_deadline).toLocaleDateString(
-                        "pt-BR",
-                      )}
-                    </div>
-                  )}
                 </div>
 
-                <div className="p-5 ">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex-1 text-center ">
-                      <div className="font-bold text-lg flex items-center justify-center gap-2">
-                        <Flag country={match.team_a} />
-                        {match.team_a}
-                      </div>
-                      <LockedInput
-                        value={match.bet_score_a ?? ""}
-                        onChange={(value) =>
-                          updateBet(match.id, value, match.bet_score_b || 0)
-                        }
-                        isLocked={isLocked}
-                        lockReason={lockReason}
-                        placeholder="?"
-                      />
-                    </div>
-
-                    <div className="text-lg font-bold ">
-                      <Swords />{" "}
-                    </div>
-
-                    <div className="flex-1 text-center">
-                      <div className="font-bold text-lg flex items-center justify-center gap-2">
-                        {match.team_b}
-                        <Flag country={match.team_b} />
-                      </div>
-                      <LockedInput
-                        value={match.bet_score_b ?? ""}
-                        onChange={(value) =>
-                          updateBet(match.id, match.bet_score_a || 0, value)
-                        }
-                        isLocked={isLocked}
-                        lockReason={lockReason}
-                        placeholder="?"
-                      />
-                    </div>
+                <div className="[grid-area:title] flex justify-around items-center px-4 py-2">
+                  <div className="font-bold text-lg flex items-center justify-center gap-2">
+                    <Flag country={match.team_a} />
+                    {match.team_a}
                   </div>
+                  <div className="text-lg font-bold">
+                    <Swords />
+                  </div>
+                  <div className="font-bold text-lg flex items-center justify-center gap-2">
+                    {match.team_b}
+                    <Flag country={match.team_b} />
+                  </div>
+                </div>
+
+                <div className="[grid-area:input] flex justify-around items-center px-4">
+                  <LockedInput
+                    value={tempBet.a}
+                    onChange={(value) =>
+                      updateTempBet(match.id, value, tempBet.b)
+                    }
+                    isLocked={isLocked}
+                    lockReason={lockReason}
+                    placeholder="?"
+                  />
+                  <LockedInput
+                    value={tempBet.b}
+                    onChange={(value) =>
+                      updateTempBet(match.id, tempBet.a, value)
+                    }
+                    isLocked={isLocked}
+                    lockReason={lockReason}
+                    placeholder="?"
+                  />
+                </div>
+
+                <div className="[grid-area:footer] flex justify-end items-center p-2">
+                  {lockReason && (
+                    <div className="bg-smui-red text-slate-950 text-xs p-2 flex gap-2 rounded">
+                      <LockKeyhole size={14} />
+                      <span>{lockReason}</span>
+                    </div>
+                  )}
+                  {!isLocked && (
+                    <button
+                      onClick={() => saveBet(match.id)}
+                      disabled={saving}
+                      className="w-28 h-8 px-4 py-1.5 border bg-smui-yellow hover:bg-smui-yellow/80 cursor-pointer rounded-lg flex items-center gap-2 transition disabled:opacity-50"
+                    >
+                      <Save size={16} />
+                      {saving ? (
+                        <Loader size={16} className="animate-spin" />
+                      ) : (
+                        "Salvar"
+                      )}
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -528,18 +633,9 @@ export default function BetsPage() {
         </div>
 
         {filteredMatches.length === 0 && (
-          <div className="text-center  flex items-center flex-col text-xl py-12">
+          <div className="text-center flex items-center flex-col text-xl py-12">
             <CircleOff size={100} className="mb-8" />
-            <p>Nenhum jogo disponível para esta fase</p>
-          </div>
-        )}
-
-        {saving && (
-          <div className="fixed bottom-4 right-4 bg-smui-green p-4  animate-pulse">
-            <div className="flex gap-2">
-              <Save />
-              <span>Salvando aposta...</span>
-            </div>
+            <p>Nenhum jogo disponível</p>
           </div>
         )}
       </div>

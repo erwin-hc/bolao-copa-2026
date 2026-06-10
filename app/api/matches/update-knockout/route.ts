@@ -22,17 +22,15 @@ export async function POST(request: Request) {
       );
     }
 
-    console.log("🔄 Atualizando mata-mata...");
+    console.log("🔄 Atualizando mata-mata automaticamente...");
     console.log("=".repeat(60));
 
-    // ============================================
-    // PASSO 1: Calcular classificação dos grupos
-    // ============================================
+    // 1. Buscar classificação dos grupos
     const groups = ["A", "B", "C", "D", "E", "F", "G", "H"];
     const groupRankings: { [key: string]: { first: string; second: string } } =
       {};
 
-    console.log("\n📊 Calculando classificação dos grupos...");
+    console.log("📊 Calculando classificação dos grupos...");
 
     for (const group of groups) {
       const matches = db
@@ -46,7 +44,7 @@ export async function POST(request: Request) {
         .all(group);
 
       if (matches.length === 0) {
-        console.log(`⚠️ Grupo ${group}: sem resultados - pulando`);
+        console.log(`⚠️ Grupo ${group}: sem resultados ainda`);
         continue;
       }
 
@@ -97,52 +95,18 @@ export async function POST(request: Request) {
       );
     }
 
-    // ============================================
-    // PASSO 2: Atualizar Oitavas
-    // ============================================
+    // 2. Atualizar Oitavas
     console.log("\n🏆 Atualizando Oitavas de Final...");
 
     const round16Data = [
-      {
-        pos: 1,
-        team_a: groupRankings.A?.first,
-        team_b: groupRankings.B?.second,
-      },
-      {
-        pos: 2,
-        team_a: groupRankings.C?.first,
-        team_b: groupRankings.D?.second,
-      },
-      {
-        pos: 3,
-        team_a: groupRankings.E?.first,
-        team_b: groupRankings.F?.second,
-      },
-      {
-        pos: 4,
-        team_a: groupRankings.G?.first,
-        team_b: groupRankings.H?.second,
-      },
-      {
-        pos: 5,
-        team_a: groupRankings.B?.first,
-        team_b: groupRankings.A?.second,
-      },
-      {
-        pos: 6,
-        team_a: groupRankings.D?.first,
-        team_b: groupRankings.C?.second,
-      },
-      {
-        pos: 7,
-        team_a: groupRankings.F?.first,
-        team_b: groupRankings.E?.second,
-      },
-      {
-        pos: 8,
-        team_a: groupRankings.H?.first,
-        team_b: groupRankings.G?.second,
-      },
+      { team_a: groupRankings.A?.first, team_b: groupRankings.B?.second },
+      { team_a: groupRankings.C?.first, team_b: groupRankings.D?.second },
+      { team_a: groupRankings.E?.first, team_b: groupRankings.F?.second },
+      { team_a: groupRankings.G?.first, team_b: groupRankings.H?.second },
+      { team_a: groupRankings.B?.first, team_b: groupRankings.A?.second },
+      { team_a: groupRankings.D?.first, team_b: groupRankings.C?.second },
+      { team_a: groupRankings.F?.first, team_b: groupRankings.E?.second },
+      { team_a: groupRankings.H?.first, team_b: groupRankings.G?.second },
     ];
 
     const round16Matches = db
@@ -159,69 +123,86 @@ export async function POST(request: Request) {
           round16Matches[i].id,
         );
         console.log(
-          `   ✅ Jogo ${i + 1}: ${round16Data[i].team_a} vs ${round16Data[i].team_b}`,
+          `   ✅ Oitava ${i + 1}: ${round16Data[i].team_a} vs ${round16Data[i].team_b}`,
         );
       }
     }
 
-    // ============================================
-    // PASSO 3: Calcular vencedores das Oitavas
-    // ============================================
-    console.log("\n🏆 Calculando vencedores das Oitavas...");
-
+    // 3. Buscar vencedores das Oitavas
     const round16Current = db
       .prepare(
         `
       SELECT id, team_a, team_b, official_score_a, official_score_b 
-      FROM matches WHERE phase = 'round16'
+      FROM matches WHERE phase = 'round16' AND official_score_a IS NOT NULL
     `,
       )
       .all() as any[];
 
-    const round16Winners: { [id: number]: string } = {};
+    const round16Winners: { [key: string]: string } = {};
 
     for (const match of round16Current) {
       if (match.official_score_a !== null && match.official_score_b !== null) {
         if (match.official_score_a > match.official_score_b) {
-          round16Winners[match.id] = match.team_a;
-          console.log(
-            `   ✅ ${match.team_a} venceu ${match.team_b} (${match.official_score_a}-${match.official_score_b})`,
-          );
+          round16Winners[`${match.team_a} vs ${match.team_b}`] = match.team_a;
+          console.log(`   ✅ Oitava: ${match.team_a} venceu ${match.team_b}`);
         } else if (match.official_score_b > match.official_score_a) {
-          round16Winners[match.id] = match.team_b;
-          console.log(
-            `   ✅ ${match.team_b} venceu ${match.team_a} (${match.official_score_b}-${match.official_score_a})`,
-          );
-        } else {
-          console.log(
-            `   ⚠️ Empate sem pênaltis: ${match.team_a} vs ${match.team_b}`,
-          );
+          round16Winners[`${match.team_a} vs ${match.team_b}`] = match.team_b;
+          console.log(`   ✅ Oitava: ${match.team_b} venceu ${match.team_a}`);
         }
       }
     }
 
-    // ============================================
-    // PASSO 4: Atualizar Quartas (baseado nos vencedores)
-    // ============================================
+    // 4. Atualizar Quartas
     console.log("\n🏆 Atualizando Quartas de Final...");
 
-    // Agrupar vencedores das oitavas em pares
+    const allRound16 = db
+      .prepare(
+        `
+      SELECT team_a, team_b FROM matches WHERE phase = 'round16' ORDER BY id
+    `,
+      )
+      .all() as any[];
+
     const quarterData = [
       {
-        team_a: round16Winners[round16Matches[0]?.id],
-        team_b: round16Winners[round16Matches[1]?.id],
+        team_a:
+          round16Winners[
+            `${allRound16[0]?.team_a} vs ${allRound16[0]?.team_b}`
+          ] || allRound16[0]?.team_a,
+        team_b:
+          round16Winners[
+            `${allRound16[1]?.team_a} vs ${allRound16[1]?.team_b}`
+          ] || allRound16[1]?.team_b,
       },
       {
-        team_a: round16Winners[round16Matches[2]?.id],
-        team_b: round16Winners[round16Matches[3]?.id],
+        team_a:
+          round16Winners[
+            `${allRound16[2]?.team_a} vs ${allRound16[2]?.team_b}`
+          ] || allRound16[2]?.team_a,
+        team_b:
+          round16Winners[
+            `${allRound16[3]?.team_a} vs ${allRound16[3]?.team_b}`
+          ] || allRound16[3]?.team_b,
       },
       {
-        team_a: round16Winners[round16Matches[4]?.id],
-        team_b: round16Winners[round16Matches[5]?.id],
+        team_a:
+          round16Winners[
+            `${allRound16[4]?.team_a} vs ${allRound16[4]?.team_b}`
+          ] || allRound16[4]?.team_a,
+        team_b:
+          round16Winners[
+            `${allRound16[5]?.team_a} vs ${allRound16[5]?.team_b}`
+          ] || allRound16[5]?.team_b,
       },
       {
-        team_a: round16Winners[round16Matches[6]?.id],
-        team_b: round16Winners[round16Matches[7]?.id],
+        team_a:
+          round16Winners[
+            `${allRound16[6]?.team_a} vs ${allRound16[6]?.team_b}`
+          ] || allRound16[6]?.team_a,
+        team_b:
+          round16Winners[
+            `${allRound16[7]?.team_a} vs ${allRound16[7]?.team_b}`
+          ] || allRound16[7]?.team_b,
       },
     ];
 
@@ -244,53 +225,61 @@ export async function POST(request: Request) {
       }
     }
 
-    // ============================================
-    // PASSO 5: Calcular vencedores das Quartas
-    // ============================================
-    console.log("\n🏆 Calculando vencedores das Quartas...");
-
+    // 5. Buscar vencedores das Quartas
     const quarterCurrent = db
       .prepare(
         `
       SELECT id, team_a, team_b, official_score_a, official_score_b 
-      FROM matches WHERE phase = 'quarter'
+      FROM matches WHERE phase = 'quarter' AND official_score_a IS NOT NULL
     `,
       )
       .all() as any[];
 
-    const quarterWinners: { [id: number]: string } = {};
+    const quarterWinners: { [key: string]: string } = {};
 
     for (const match of quarterCurrent) {
       if (match.official_score_a !== null && match.official_score_b !== null) {
         if (match.official_score_a > match.official_score_b) {
-          quarterWinners[match.id] = match.team_a;
-          console.log(
-            `   ✅ ${match.team_a} venceu ${match.team_b} (${match.official_score_a}-${match.official_score_b})`,
-          );
+          quarterWinners[`${match.team_a} vs ${match.team_b}`] = match.team_a;
+          console.log(`   ✅ Quartas: ${match.team_a} venceu ${match.team_b}`);
         } else if (match.official_score_b > match.official_score_a) {
-          quarterWinners[match.id] = match.team_b;
-          console.log(
-            `   ✅ ${match.team_b} venceu ${match.team_a} (${match.official_score_b}-${match.official_score_a})`,
-          );
-        } else {
-          console.log(`   ⚠️ Empate: ${match.team_a} vs ${match.team_b}`);
+          quarterWinners[`${match.team_a} vs ${match.team_b}`] = match.team_b;
+          console.log(`   ✅ Quartas: ${match.team_b} venceu ${match.team_a}`);
         }
       }
     }
 
-    // ============================================
-    // PASSO 6: Atualizar Semifinais
-    // ============================================
+    // 6. Atualizar Semifinais
     console.log("\n🏆 Atualizando Semifinais...");
+
+    const allQuarter = db
+      .prepare(
+        `
+      SELECT team_a, team_b FROM matches WHERE phase = 'quarter' ORDER BY id
+    `,
+      )
+      .all() as any[];
 
     const semiData = [
       {
-        team_a: quarterWinners[quarterMatches[0]?.id],
-        team_b: quarterWinners[quarterMatches[1]?.id],
+        team_a:
+          quarterWinners[
+            `${allQuarter[0]?.team_a} vs ${allQuarter[0]?.team_b}`
+          ] || allQuarter[0]?.team_a,
+        team_b:
+          quarterWinners[
+            `${allQuarter[1]?.team_a} vs ${allQuarter[1]?.team_b}`
+          ] || allQuarter[1]?.team_b,
       },
       {
-        team_a: quarterWinners[quarterMatches[2]?.id],
-        team_b: quarterWinners[quarterMatches[3]?.id],
+        team_a:
+          quarterWinners[
+            `${allQuarter[2]?.team_a} vs ${allQuarter[2]?.team_b}`
+          ] || allQuarter[2]?.team_a,
+        team_b:
+          quarterWinners[
+            `${allQuarter[3]?.team_a} vs ${allQuarter[3]?.team_b}`
+          ] || allQuarter[3]?.team_b,
       },
     ];
 
@@ -309,89 +298,124 @@ export async function POST(request: Request) {
       }
     }
 
-    // ============================================
-    // PASSO 7: Calcular vencedores das Semis
-    // ============================================
-    console.log("\n🏆 Calculando vencedores das Semifinais...");
-
+    // 7. Buscar vencedores e perdedores das Semis
     const semiCurrent = db
       .prepare(
         `
       SELECT id, team_a, team_b, official_score_a, official_score_b 
-      FROM matches WHERE phase = 'semi'
+      FROM matches WHERE phase = 'semi' AND official_score_a IS NOT NULL
     `,
       )
       .all() as any[];
 
-    const semiWinners: { [id: number]: string } = {};
+    const semiWinners: { [key: string]: string } = {};
     const semiLosers: string[] = [];
 
     for (const match of semiCurrent) {
       if (match.official_score_a !== null && match.official_score_b !== null) {
         if (match.official_score_a > match.official_score_b) {
-          semiWinners[match.id] = match.team_a;
+          semiWinners[`${match.team_a} vs ${match.team_b}`] = match.team_a;
           semiLosers.push(match.team_b);
-          console.log(
-            `   ✅ ${match.team_a} venceu ${match.team_b} (${match.official_score_a}-${match.official_score_b})`,
-          );
+          console.log(`   ✅ Semi: ${match.team_a} venceu ${match.team_b}`);
         } else if (match.official_score_b > match.official_score_a) {
-          semiWinners[match.id] = match.team_b;
+          semiWinners[`${match.team_a} vs ${match.team_b}`] = match.team_b;
           semiLosers.push(match.team_a);
-          console.log(
-            `   ✅ ${match.team_b} venceu ${match.team_a} (${match.official_score_b}-${match.official_score_a})`,
-          );
+          console.log(`   ✅ Semi: ${match.team_b} venceu ${match.team_a}`);
         }
       }
     }
 
-    // ============================================
-    // PASSO 8: Atualizar Final
-    // ============================================
+    // 8. Atualizar Final (vencedores)
     console.log("\n🏆 Atualizando Final...");
 
-    if (semiWinners[semiMatches[0]?.id] && semiWinners[semiMatches[1]?.id]) {
-      const finalId = db
-        .prepare(`SELECT id FROM matches WHERE phase = 'final' LIMIT 1`)
-        .get() as { id: number };
-      if (finalId) {
-        db.prepare(
-          `UPDATE matches SET team_a = ?, team_b = ? WHERE id = ?`,
-        ).run(
-          semiWinners[semiMatches[0].id],
-          semiWinners[semiMatches[1].id],
-          finalId.id,
-        );
-        console.log(
-          `   ✅ Final: ${semiWinners[semiMatches[0].id]} vs ${semiWinners[semiMatches[1].id]}`,
-        );
-      }
+    const allSemi = db
+      .prepare(
+        `
+      SELECT team_a, team_b FROM matches WHERE phase = 'semi' ORDER BY id
+    `,
+      )
+      .all() as any[];
+
+    const finalMatch = [
+      {
+        team_a:
+          semiWinners[`${allSemi[0]?.team_a} vs ${allSemi[0]?.team_b}`] ||
+          allSemi[0]?.team_a,
+        team_b:
+          semiWinners[`${allSemi[1]?.team_a} vs ${allSemi[1]?.team_b}`] ||
+          allSemi[1]?.team_b,
+      },
+    ];
+
+    const finalId = db
+      .prepare(`SELECT id FROM matches WHERE phase = 'final' LIMIT 1`)
+      .get() as { id: number };
+    if (finalId && finalMatch[0].team_a && finalMatch[0].team_b) {
+      db.prepare(`UPDATE matches SET team_a = ?, team_b = ? WHERE id = ?`).run(
+        finalMatch[0].team_a,
+        finalMatch[0].team_b,
+        finalId.id,
+      );
+      console.log(
+        `   ✅ Final: ${finalMatch[0].team_a} vs ${finalMatch[0].team_b}`,
+      );
     }
 
-    // ============================================
-    // PASSO 9: Atualizar Terceiro Lugar
-    // ============================================
+    // 9. Atualizar Terceiro Lugar (perdedores) - CORREÇÃO AQUI!
     console.log("\n🏆 Atualizando Terceiro Lugar...");
 
-    if (semiLosers.length >= 2) {
-      const thirdId = db
-        .prepare(`SELECT id FROM matches WHERE phase = 'third' LIMIT 1`)
-        .get() as { id: number };
-      if (thirdId) {
+    const thirdId = db
+      .prepare(`SELECT id FROM matches WHERE phase = 'third' LIMIT 1`)
+      .get() as { id: number };
+
+    if (thirdId) {
+      if (semiLosers.length >= 2) {
+        // Se temos os dois perdedores
         db.prepare(
           `UPDATE matches SET team_a = ?, team_b = ? WHERE id = ?`,
         ).run(semiLosers[0], semiLosers[1], thirdId.id);
         console.log(
           `   ✅ Terceiro Lugar: ${semiLosers[0]} vs ${semiLosers[1]}`,
         );
+      } else {
+        // Se não temos resultados das semis, buscar os times atuais
+        const currentThird = db
+          .prepare(
+            `SELECT team_a, team_b FROM matches WHERE phase = 'third' LIMIT 1`,
+          )
+          .get() as any;
+        console.log(
+          `   ⚠️ Terceiro Lugar mantido: ${currentThird?.team_a} vs ${currentThird?.team_b}`,
+        );
       }
     }
+
+    // 10. Verificar resultado final
+    console.log("\n📊 VERIFICAÇÃO FINAL:");
+
+    const finalTeams = db
+      .prepare(
+        `SELECT team_a, team_b FROM matches WHERE phase = 'final' LIMIT 1`,
+      )
+      .get() as any;
+    const thirdTeams = db
+      .prepare(
+        `SELECT team_a, team_b FROM matches WHERE phase = 'third' LIMIT 1`,
+      )
+      .get() as any;
+
+    console.log(`   Final: ${finalTeams?.team_a} vs ${finalTeams?.team_b}`);
+    console.log(`   3º Lugar: ${thirdTeams?.team_a} vs ${thirdTeams?.team_b}`);
 
     console.log("\n✅ Mata-mata atualizado com sucesso!");
 
     return NextResponse.json({
       success: true,
-      message: "Mata-mata atualizado dinamicamente com sucesso!",
-      data: { groupRankings },
+      message: "Mata-mata atualizado com sucesso!",
+      data: {
+        final: `${finalTeams?.team_a} vs ${finalTeams?.team_b}`,
+        third: `${thirdTeams?.team_a} vs ${thirdTeams?.team_b}`,
+      },
     });
   } catch (error) {
     console.error("Erro detalhado:", error);
@@ -403,21 +427,5 @@ export async function POST(request: Request) {
       },
       { status: 500 },
     );
-  }
-}
-
-export async function GET(request: Request) {
-  try {
-    const authHeader = request.headers.get("authorization");
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-    }
-
-    const token = authHeader.split(" ")[1];
-    jwt.verify(token, JWT_SECRET);
-
-    return NextResponse.json({ status: "API funcionando" });
-  } catch (error) {
-    return NextResponse.json({ error: "Erro interno" }, { status: 500 });
   }
 }

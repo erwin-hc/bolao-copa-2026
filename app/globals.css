@@ -69,7 +69,6 @@
 }
 
 body {
-  /* color: var(--foreground); */
 }
 
 :root {
@@ -178,6 +177,36 @@ body {
   }
   html {
     @apply font-sans;
+  }
+}
+
+@layer utilities {
+  .bg-smui-yellow\/50 {
+    background-color: hsl(var(--smui-yellow) / 0.5);
+  }
+  .bg-smui-red\/50 {
+    background-color: hsl(var(--smui-red) / 0.5);
+  }
+  .bg-smui-green\/50 {
+    background-color: hsl(var(--smui-green) / 0.5);
+  }
+  .bg-smui-purple\/50 {
+    background-color: hsl(var(--smui-purple) / 0.5);
+  }
+  .bg-smui-orange\/50 {
+    background-color: hsl(var(--smui-orange) / 0.5);
+  }
+  .bg-smui-frost-1\/50 {
+    background-color: hsl(var(--smui-frost-1) / 0.5);
+  }
+  .bg-smui-frost-2\/50 {
+    background-color: hsl(var(--smui-frost-2) / 0.5);
+  }
+  .bg-smui-frost-3\/50 {
+    background-color: hsl(var(--smui-frost-3) / 0.5);
+  }
+  .bg-smui-frost-4\/50 {
+    background-color: hsl(var(--smui-frost-4) / 0.5);
   }
 }
 

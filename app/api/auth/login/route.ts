@@ -52,7 +52,7 @@ export async function POST(request: Request) {
         is_admin: user.is_admin,
       },
       JWT_SECRET,
-      { expiresIn: "7d" },
+      { expiresIn: "1d" },
     );
 
     return NextResponse.json({

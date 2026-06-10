@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { SoccerBallIcon, SoccerPlayerAvatarIcon } from "../components/svgs";
 
 export default function LoginPage() {
@@ -9,15 +8,6 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-
-  // Verificar se já está logado
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (token) {
-      console.log("Usuário já logado, redirecionando...");
-      window.location.href = "/bets";
-    }
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,14 +26,10 @@ export default function LoginPage() {
       const data = await response.json();
 
       if (response.ok) {
-        // Salvar dados
         localStorage.setItem("token", data.token);
         localStorage.setItem("user", JSON.stringify(data.user));
-
-        console.log("Login OK, redirecionando...");
-
-        // Redirecionar imediatamente
-        window.location.href = "/bets";
+        // Forçar navegação
+        window.location.assign("/bets");
       } else {
         setError(data.error || "Erro ao fazer login");
         setLoading(false);
@@ -56,8 +42,8 @@ export default function LoginPage() {
   };
 
   const handleTestLogin = () => {
-    setEmail("teste@teste.com");
-    setPassword("123456");
+    setEmail("erwin.stein@gmail.com");
+    setPassword("erwin");
   };
 
   return (

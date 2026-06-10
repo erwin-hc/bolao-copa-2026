@@ -2,17 +2,11 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 export function middleware(request: NextRequest) {
-  const pathname = request.nextUrl.pathname;
-
-  if (pathname === "/") {
-    return NextResponse.redirect(new URL("/login", request.url));
-  }
-
-  // Só proteger APIs
-  if (pathname.startsWith("/api/")) {
+  // Apenas proteger APIs, páginas são abertas
+  if (request.nextUrl.pathname.startsWith("/api/")) {
     const publicApiPaths = ["/api/auth/login", "/api/auth/register"];
 
-    if (publicApiPaths.includes(pathname)) {
+    if (publicApiPaths.includes(request.nextUrl.pathname)) {
       return NextResponse.next();
     }
 
@@ -23,10 +17,10 @@ export function middleware(request: NextRequest) {
     }
   }
 
-  // Para páginas, permitir todas (a verificação é feita no cliente)
+  // Páginas: sempre permitir (a segurança é feita no frontend)
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/", "/api/:path*"],
+  matcher: ["/api/:path*"],
 };

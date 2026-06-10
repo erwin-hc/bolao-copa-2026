@@ -4,6 +4,7 @@ import "./globals.css";
 import { cn } from "@/lib/utils";
 import { MessageProvider } from "@/providers/message-provider";
 import MessageDisplay from "@/components/ui/MessageDisplay";
+import BackToTopButton from "./components/BackToTopButton";
 
 const figtree = Figtree({ subsets: ["latin"], variable: "--font-sans" });
 
@@ -17,9 +18,13 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: "Bolão Copa App",
-  description: "Sistema de apostas para a Copa do Mundo",
+// app/layout.tsx
+export const metadata = {
+  title: "Bolão Copa 2026",
+  description: "Sistema de apostas",
+  other: {
+    "Cache-Control": "no-cache, no-store, must-revalidate",
+  },
 };
 
 export default function RootLayout({
@@ -41,8 +46,9 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <MessageProvider>
-          <MessageDisplay />
+          {/* <MessageDisplay /> */}
           {children}
+          <BackToTopButton position="bottom-center" />
         </MessageProvider>
       </body>
     </html>

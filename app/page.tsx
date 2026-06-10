@@ -1,6 +1,10 @@
-import { div } from "framer-motion/client";
-import Image from "next/image";
+"use client";
+import { useEffect } from "react";
 
 export default function Home() {
+  useEffect(() => {
+    window.location.assign("/login");
+  }, []);
+
   return <div></div>;
 }
