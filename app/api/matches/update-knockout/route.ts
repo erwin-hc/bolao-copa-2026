@@ -172,7 +172,7 @@ export async function POST(request: Request) {
         team_b:
           round16Winners[
             `${allRound16[1]?.team_a} vs ${allRound16[1]?.team_b}`
-          ] || allRound16[1]?.team_b,
+          ] || allRound16[1]?.team_a,
       },
       {
         team_a:
@@ -182,7 +182,7 @@ export async function POST(request: Request) {
         team_b:
           round16Winners[
             `${allRound16[3]?.team_a} vs ${allRound16[3]?.team_b}`
-          ] || allRound16[3]?.team_b,
+          ] || allRound16[3]?.team_a,
       },
       {
         team_a:
@@ -192,7 +192,7 @@ export async function POST(request: Request) {
         team_b:
           round16Winners[
             `${allRound16[5]?.team_a} vs ${allRound16[5]?.team_b}`
-          ] || allRound16[5]?.team_b,
+          ] || allRound16[5]?.team_a,
       },
       {
         team_a:
@@ -202,7 +202,7 @@ export async function POST(request: Request) {
         team_b:
           round16Winners[
             `${allRound16[7]?.team_a} vs ${allRound16[7]?.team_b}`
-          ] || allRound16[7]?.team_b,
+          ] || allRound16[7]?.team_a,
       },
     ];
 
@@ -269,7 +269,7 @@ export async function POST(request: Request) {
         team_b:
           quarterWinners[
             `${allQuarter[1]?.team_a} vs ${allQuarter[1]?.team_b}`
-          ] || allQuarter[1]?.team_b,
+          ] || allQuarter[1]?.team_a,
       },
       {
         team_a:
@@ -279,7 +279,7 @@ export async function POST(request: Request) {
         team_b:
           quarterWinners[
             `${allQuarter[3]?.team_a} vs ${allQuarter[3]?.team_b}`
-          ] || allQuarter[3]?.team_b,
+          ] || allQuarter[3]?.team_a,
       },
     ];
 
@@ -343,7 +343,7 @@ export async function POST(request: Request) {
           allSemi[0]?.team_a,
         team_b:
           semiWinners[`${allSemi[1]?.team_a} vs ${allSemi[1]?.team_b}`] ||
-          allSemi[1]?.team_b,
+          allSemi[1]?.team_a,
       },
     ];
 
