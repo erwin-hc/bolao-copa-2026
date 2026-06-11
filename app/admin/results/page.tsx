@@ -4,7 +4,15 @@ import { SoccerBallIcon, SoccerScore } from "@/app/components/svgs";
 import MessageDisplay from "@/components/ui/MessageDisplay";
 import { useState, useEffect } from "react";
 import { useMessages } from "@/providers/message-provider";
-import { Calendar, CircleOff, FileWarning, Loader, Swords } from "lucide-react";
+import {
+  Calendar,
+  CircleCheckBig,
+  CircleOff,
+  FileWarning,
+  Loader,
+  Save,
+  Swords,
+} from "lucide-react";
 import { countryCodeMap, Flag } from "@/app/bets/page";
 
 type Match = {
@@ -200,33 +208,39 @@ export default function AdminResultsPage() {
     return phases[phase] || phase;
   };
 
-  const groupMatchesByDate = () => {
-    const grouped: { [date: string]: Match[] } = {};
+  const phaseOrder = ["groups", "round16", "quarter", "semi", "third", "final"];
 
-    matches.forEach((match) => {
-      const dateKey = new Date(match.match_date).toLocaleDateString("pt-BR");
-      if (!grouped[dateKey]) {
-        grouped[dateKey] = [];
-      }
-      grouped[dateKey].push(match);
+  const groupMatchesByPhase = () => {
+    const groupedByPhase: { [phase: string]: Match[] } = {};
+
+    phaseOrder.forEach((phase) => {
+      groupedByPhase[phase] = [];
     });
 
-    for (const date in grouped) {
-      grouped[date].sort((a, b) => {
-        if (a.group_name && b.group_name) {
-          const groupCompare = a.group_name.localeCompare(b.group_name);
+    matches.forEach((match) => {
+      if (groupedByPhase[match.phase]) {
+        groupedByPhase[match.phase].push(match);
+      }
+    });
+
+    phaseOrder.forEach((phase) => {
+      groupedByPhase[phase].sort((a, b) => {
+        if (phase === "groups") {
+          const groupA = a.group_name || "";
+          const groupB = b.group_name || "";
+          const groupCompare = groupA.localeCompare(groupB);
           if (groupCompare !== 0) return groupCompare;
         }
         return (
           new Date(a.match_date).getTime() - new Date(b.match_date).getTime()
         );
       });
-    }
+    });
 
-    return grouped;
+    return groupedByPhase;
   };
 
-  const groupedMatches = groupMatchesByDate();
+  const groupedMatches = groupMatchesByPhase();
 
   if (loading) {
     return (
@@ -290,38 +304,27 @@ export default function AdminResultsPage() {
         </div>
       </div>
 
-      {/* Botão manual para atualizar mata-mata */}
-      {/* <div className="flex justify-end m-4">
-        <button
-          onClick={updateKnockout}
-          className="bg-smui-frost-4 hover:bg-smui-frost-4/80 text-white px-4 py-2 rounded-lg transition flex items-center gap-2"
-        >
-          🔄 Atualizar Chaveamento
-        </button>
-      </div> */}
-
-      {/* Lista de jogos agrupados por data */}
+      {/* Lista de jogos agrupados por fase */}
       {Object.entries(groupedMatches)
-        .sort(([dateA], [dateB]) => {
-          const [dayA, monthA, yearA] = dateA.split("/");
-          const [dayB, monthB, yearB] = dateB.split("/");
-          const dateObjA = new Date(`${yearA}-${monthA}-${dayA}`);
-          const dateObjB = new Date(`${yearB}-${monthB}-${dayB}`);
-          return dateObjA.getTime() - dateObjB.getTime();
-        })
-        .map(([date, dateMatches]) => (
-          <div key={date} className="m-4 ">
-            <div className="text-xl font-bold text-slate-950 mb-4 flex gap-2 items-center ">
-              <Calendar size={16} /> {date}
-            </div>
+        .sort(
+          ([phaseA], [phaseB]) =>
+            phaseOrder.indexOf(phaseA) - phaseOrder.indexOf(phaseB),
+        )
+        .map(([phase, phaseMatches]) => (
+          <div key={phase} className="m-4 ">
+            {matches.length !== 0 && (
+              <div className="text-xl font-bold text-slate-950 mb-4 flex gap-2 items-center ">
+                <Calendar size={16} /> {getPhaseName(phase)}
+              </div>
+            )}
             <div
               className={`grid gap-4 text-smui-dark-surface-0 ${
-                dateMatches.length === 1
+                phaseMatches.length === 1
                   ? "grid-cols-1 w-full mx-auto"
                   : "md:grid-cols-2 lg:grid-cols-2"
               }`}
             >
-              {dateMatches.map((match) => {
+              {phaseMatches.map((match) => {
                 const values = editValues[match.id] || { a: "", b: "" };
                 const hasResult = match.official_score_a !== null;
 
@@ -331,12 +334,15 @@ export default function AdminResultsPage() {
                     className="bg-smui-surface-2 border border-smui-dark-surface-3/50"
                   >
                     {/* Cabeçalho */}
-                    <div className="bg-slate-500/25 border-b border-smui-dark-surface-3/50 flex justify-between items-start mb-4 flex-wrap gap-2">
+                    <div className="bg-slate-500/25 border-b border-smui-dark-surface-3/50 flex justify-between items-start  flex-wrap gap-2">
                       <div className="flex items-center gap-2 flex-wrap p-4">
-                        <span className="text-xs p-2">
+                        <span className="text-xs p-2 bg-smui-purple/50 rounded font-bold">
                           {new Date(match.match_date).toLocaleTimeString(
                             "pt-BR",
                             {
+                              day: "2-digit",
+                              month: "2-digit",
+                              year: "2-digit",
                               hour: "2-digit",
                               minute: "2-digit",
                             },
@@ -351,16 +357,10 @@ export default function AdminResultsPage() {
                           </span>
                         )}
                       </div>
-                      {hasResult && savedMatchId !== match.id && (
-                        <span className="bg-smui-green text-xs p-2 m-4 rounded font-bold">
-                          ✓ Resultado: {match.official_score_a} x{" "}
-                          {match.official_score_b}
-                        </span>
-                      )}
                     </div>
 
                     {/* Placar */}
-                    <div className="flex items-center justify-between gap-4 p-4">
+                    <div className="flex items-center justify-between gap-1 p-2">
                       <div className="flex-1 text-center">
                         <div className="font-bold text-lg mb-2 flex gap-2 items-center justify-center">
                           <Flag country={match.team_a} />
@@ -403,12 +403,18 @@ export default function AdminResultsPage() {
                     </div>
 
                     {/* Botão Salvar */}
-                    <div className="flex items-center justify-end m-4">
+                    <div className="flex items-center justify-end ">
+                      {hasResult && savedMatchId !== match.id && (
+                        <span className="bg-smui-green text-xs p-2 m-2 rounded font-bold">
+                          ✓ Resultado: {match.official_score_a} x{" "}
+                          {match.official_score_b}
+                        </span>
+                      )}
                       <button
                         onClick={() => saveResult(match.id)}
                         disabled={saving}
                         className={`
-                          flex items-center justify-center cursor-pointer w-28 h-8 px-6 py-2 font-bold transition border border-smui-dark-surface-3/50
+                          flex items-center justify-center cursor-pointer w-28 h-8 px-6 py-2 font-bold transition border border-smui-dark-surface-3/50 m-2
                           ${saving ? "bg-smui-yellow/80 cursor-not-allowed" : "bg-smui-yellow hover:bg-smui-yellow/80"}
                         `}
                       >
@@ -420,10 +426,13 @@ export default function AdminResultsPage() {
                       </button>
                     </div>
 
-                    {hasResult && (
-                      <div className="mt-3 flex gap-2 w-full items-center justify-center bg-smui-red/50 border-t p-4 border-smui-dark-surface-3/50">
-                        <FileWarning /> Resultado já salvo, agora só é possível
-                        alterar o resultado.
+                    {hasResult ? (
+                      <div className="flex gap-2 w-full items-center justify-start bg-smui-red/50 border-t p-2 border-smui-dark-surface-3/50">
+                        <CircleCheckBig /> Resultado salvo!
+                      </div>
+                    ) : (
+                      <div className="flex gap-2 w-full items-center justify-start bg-smui-green/50 border-t p-2 border-smui-dark-surface-3/50">
+                        <Save /> Insira o resultado e clique em salvar
                       </div>
                     )}
                   </div>
