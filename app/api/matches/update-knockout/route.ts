@@ -110,7 +110,9 @@ export async function POST(request: Request) {
     ];
 
     const round16Matches = db
-      .prepare(`SELECT id FROM matches WHERE phase = 'round16' ORDER BY id`)
+      .prepare(
+        `SELECT id FROM matches WHERE phase = 'round16' ORDER BY match_date, id`,
+      )
       .all() as { id: number }[];
 
     for (let i = 0; i < round16Data.length && i < round16Matches.length; i++) {
@@ -158,7 +160,7 @@ export async function POST(request: Request) {
     const allRound16 = db
       .prepare(
         `
-      SELECT team_a, team_b FROM matches WHERE phase = 'round16' ORDER BY id
+      SELECT team_a, team_b FROM matches WHERE phase = 'round16' ORDER BY match_date, id
     `,
       )
       .all() as any[];
@@ -207,7 +209,7 @@ export async function POST(request: Request) {
     ];
 
     const quarterMatches = db
-      .prepare(`SELECT id FROM matches WHERE phase = 'quarter' ORDER BY id`)
+      .prepare(`SELECT id FROM matches WHERE phase = 'quarter' ORDER BY match_date, id`)
       .all() as { id: number }[];
 
     for (let i = 0; i < quarterData.length && i < quarterMatches.length; i++) {
@@ -255,7 +257,7 @@ export async function POST(request: Request) {
     const allQuarter = db
       .prepare(
         `
-      SELECT team_a, team_b FROM matches WHERE phase = 'quarter' ORDER BY id
+      SELECT team_a, team_b FROM matches WHERE phase = 'quarter' ORDER BY match_date, id
     `,
       )
       .all() as any[];
@@ -284,7 +286,7 @@ export async function POST(request: Request) {
     ];
 
     const semiMatches = db
-      .prepare(`SELECT id FROM matches WHERE phase = 'semi' ORDER BY id`)
+      .prepare(`SELECT id FROM matches WHERE phase = 'semi' ORDER BY match_date, id`)
       .all() as { id: number }[];
 
     for (let i = 0; i < semiData.length && i < semiMatches.length; i++) {
@@ -331,7 +333,7 @@ export async function POST(request: Request) {
     const allSemi = db
       .prepare(
         `
-      SELECT team_a, team_b FROM matches WHERE phase = 'semi' ORDER BY id
+      SELECT team_a, team_b FROM matches WHERE phase = 'semi' ORDER BY match_date, id
     `,
       )
       .all() as any[];
